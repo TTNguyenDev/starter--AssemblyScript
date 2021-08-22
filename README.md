@@ -1,3 +1,6 @@
+## Certificates
+![](./cert/build-with-near-build-on-near-learn-near-club.pdf)
+
 # Sample
 
 This repository includes a complete project structure for AssemblyScript contracts targeting the NEAR platform.
