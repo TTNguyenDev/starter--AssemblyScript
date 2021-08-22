@@ -1,5 +1,5 @@
 ## Certificates
-![](./cert/build-with-near-build-on-near-learn-near-club.pdf)
+![](./cert/build-with-near-build-on-near-learn-near-club.jpg)
 
 # Sample
 
