@@ -1,106 +1,78 @@
-import { context, logging, storage, PersistentDeque } from "near-sdk-as";
+import { context, RNG, ContractPromiseBatch, PersistentVector, PersistentMap, u128 } from "near-sdk-as";
 
-/**
- * showYouKnow is a
- * - "view" function (ie. does not alter state)
- * - that takes no parameters
- * - and returns nothing
- *
- * - it has the side effect of appending to the log
- */
-export function showYouKnow(): void {
-  logging.log("showYouKnow() was called");
+enum GameState {
+    Created,
+    Joined,
+    Ended
 }
 
-/**
- * same as above but returns true for better UX
- * @returns bool that is always true
- */
-export function showYouKnow2(): bool {
-  logging.log("showYouKnow2() was called");
-  return true
+@nearBindgen
+export class Roulette {
+    gameId: u32;
+    player: string;
+    guess: bool; //1 ~ odd and 0 ~ even
+    initialAmount: u128;
+    betAmount: u128;
+    gameState: GameState;
+    winner: string;
+
+    constructor() {
+        const rng = new RNG<u32>(1, u32.MAX_VALUE);
+        const roll = rng.next();
+        this.gameId = roll;
+        this.player = 'None';
+        this.betAmount = u128.Zero;
+        this.guess = false;
+        this.initialAmount = context.attachedDeposit;
+        this.gameState = GameState.Created;
+        this.winner = context.sender;
+    }
 }
 
-/**
- * sayHello is a
- * - "view" function (ie. does not alter state)
- * - that takes no parameters
- * - and returns a string
- *
- * - it has the side effect of appending to the log
- */
-export function sayHello(): string {
-  logging.log("sayHello() was called");
+const games = new PersistentVector<Roulette>('g');
+const gameMap = new PersistentMap<u32, Roulette>('gm');
 
-  return "Hello!";
+export function createGame(): u32 {
+    const roulette = new Roulette();
+    // games.push(roulette);
+    gameMap.set(roulette.gameId, roulette);
+    return roulette.gameId;
 }
 
-/**
- * sayMyName is a
- * - "change" function (although it does NOT alter state, it DOES read from context)
- * - that takes no parameters
- * - and returns a string
- *
- * - it has the side effect of appending to the log
- */
-export function sayMyName(): string {
-  logging.log("sayMyName() was called");
-
-  return "Hello, " + context.sender + "!";
+export function joinGame(_gameId: u32, _guess: boolean): boolean {
+    if (context.attachedDeposit == u128.Zero) {
+        return false;
+    }
+    const game = gameMap.getSome(_gameId);
+    game.guess = _guess;
+    game.player = context.sender;
+    game.gameState = GameState.Joined;
+    game.betAmount = context.attachedDeposit;
+    gameMap.set(_gameId, game);
+    return true;
 }
 
-/**
- * saveMyName is a
- * - "change" function (ie. alters state)
- * - that takes no parameters
- * - saves the sender account name to contract state
- * - and returns nothing
- *
- * - it has the side effect of appending to the log
- */
-export function saveMyName(): void {
-  logging.log("saveMyName() was called");
+export function endGame(_gameId: u32): string {
+    const game = gameMap.getSome(_gameId);
+    const rng = new RNG<u8>(1, 36);
+    const roll = rng.next();
 
-  storage.setString("last_sender", context.sender);
+    if (roll % 2 == 1) {
+        if (game.guess == true)  {
+            game.winner = game.player;
+        }        
+    } else {
+        if (game.guess == false) {
+            game.winner = game.player;
+        }
+    }
+    
+    game.gameState = GameState.Ended;
+    gameMap.set(_gameId, game);
+    
+    const to_beneficiary = ContractPromiseBatch.create(game.winner);
+    to_beneficiary.transfer(u128.add(game.betAmount, game.initialAmount));
+
+    return game.winner;
 }
 
-/**
- * saveMyMessage is a
- * - "change" function (ie. alters state)
- * - that takes no parameters
- * - saves the sender account name and message to contract state
- * - and returns nothing
- *
- * - it has the side effect of appending to the log
- */
-export function saveMyMessage(message: string): bool {
-  logging.log("saveMyMessage() was called");
-
-  assert(message.length > 0, "Message can not be blank.");
-  const messages = new PersistentDeque<string>("messages");
-  messages.pushFront(context.sender + " says " + message);
-
-  return true;
-}
-
-/**
- * getAllMessages is a
- * - "change" function (ie. alters state)
- * - that takes no parameters
- * - reads and removes all recorded messages from contract state (this can become expensive!)
- * - and returns an array of messages if any are found, otherwise empty array
- *
- * - it has the side effect of appending to the log
- */
-export function getAllMessages(): Array<string> {
-  logging.log("getAllMessages() was called");
-
-  const messages = new PersistentDeque<string>("messages");
-  let results = new Array<string>();
-
-  while (!messages.isEmpty) {
-    results.push(messages.popBack());
-  }
-
-  return results;
-}
